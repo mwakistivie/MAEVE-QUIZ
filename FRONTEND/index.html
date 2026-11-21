@@ -25,7 +25,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:.45rem;border-bottom:1px
 <header><div><b>St. Thomas Quizzes</b><small>Domine Dirige Nos</small></div><div id="who" class="row"></div></header>
 <main id="app"><p>Loading…</p></main>
 <script>
-const API='PASTE_WEB_APP_URL', CLIENT='PASTE_CLIENT_ID.apps.googleusercontent.com';
+const API='https://script.google.com/macros/s/AKfycbwUvEnDDULb9sSPxxvWp4yqxfcrxgb1Cq5YCICjE2qJpN5o06GZEaKE2cA1gPaJDx6zdg/exec', CLIENT='655145408171-ubqtvac6qqcjeeas9c7hocg2b5gldj4t.apps.googleusercontent.com';
 let tok=sessionStorage.t||'', me=null, E=null;
 const $=s=>document.querySelector(s), app=$('#app');
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
