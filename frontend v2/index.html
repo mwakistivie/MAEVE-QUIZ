@@ -1,0 +1,162 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Maeve Quizz</title>
+<link rel="manifest" href="manifest.json"><link rel="icon" type="image/png" href="favicon.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="theme-color" content="#0f4c3a">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bitter:wght@600;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+:root{--bg:#eef3f1;--card:#fff;--ink:#1b2b27;--mute:#5b6b66;--g:#0f4c3a;--gold:#d9a63c;--bad:#a4343a;--ok:#1f7a4f;--line:#cfdad6}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1916;--card:#17251f;--ink:#e6efeb;--mute:#9db0a9;--g:#5fc19a;--line:#2b3d36;--bad:#e27b80;--ok:#6fd39f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 'Atkinson Hyperlegible',system-ui,sans-serif}
+h1,h2,h3{font-family:Bitter,Georgia,serif;line-height:1.2;margin:.2em 0 .5em}h1{font-size:1.7rem}h2{font-size:1.25rem}
+header{background:#0f4c3a;color:#fff;padding:.7rem 1rem;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid var(--gold)}
+header b{font-family:Bitter,serif;font-size:1.1rem}header small{display:block;opacity:.75;font-style:italic}
+main{max-width:760px;margin:0 auto;padding:1rem 1rem 4rem}
+.card{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--g);border-radius:6px;padding:1rem;margin:.8rem 0}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}.sp{justify-content:space-between}
+button,.btn{font:inherit;font-weight:700;background:var(--g);color:#fff;border:0;border-radius:6px;padding:.6rem 1rem;cursor:pointer;min-height:44px}
+button.alt{background:transparent;color:var(--g);border:2px solid var(--g)}button.bad{background:var(--bad)}button:disabled{opacity:.5}
+input,select,textarea{font:inherit;width:100%;padding:.55rem;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);margin:.2rem 0 .7rem}
+input[type=radio]{width:auto;margin:0 .5rem 0 0}label.opt{display:flex;align-items:center;padding:.5rem;border:1px solid var(--line);border-radius:6px;margin:.3rem 0;cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.tag{font-size:.85rem;padding:.1rem .5rem;border-radius:99px;background:var(--line);color:var(--ink)}.ok{color:var(--ok);font-weight:700}.no{color:var(--bad);font-weight:700}.mute{color:var(--mute)}
+table{width:100%;border-collapse:collapse}td,th{padding:.45rem;border-bottom:1px solid var(--line);text-align:left}.err{color:var(--bad);font-weight:700}
+.big{font:800 2.4rem Bitter,serif;color:var(--g)}
+</style></head><body>
+<header><div class="row" style="flex-wrap:nowrap"><img src="logo-mark.png" alt="" width="42" height="36" style="background:#fff;border-radius:8px;padding:3px;object-fit:contain"><div><b>Maeve Quizz</b><small>Aspire to Inspire</small></div></div><div id="who" class="row"></div></header>
+<main id="app"><p>Loading…</p></main>
+<script>
+const API='PASTE_WEB_APP_URL', CLIENT='655145408171-ubqtvac6qqcjeeas9c7hocg2b5gldj4t.apps.googleusercontent.com';
+let tok=localStorage.t||'', me=null, E=null;
+const $=s=>document.querySelector(s), app=$('#app');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dt=ms=>ms?new Date(+ms).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'';
+const loc=ms=>{if(!ms)return'';const d=new Date(+ms);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)};
+const jwtExp=t=>{try{return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000}catch(e){return 0}};
+const waitG=()=>new Promise(r=>{let n=0;const t=setInterval(()=>{const ok=window.google&&google.accounts;if(ok||++n>40){clearInterval(t);r(!!ok)}},100)});
+let waiter=null,gReady=false;
+function gInit(){if(gReady)return;gReady=true;google.accounts.id.initialize({client_id:CLIENT,auto_select:true,callback:r=>{tok=r.credential;localStorage.t=tok;if(waiter){waiter(true);waiter=null}else if(!me)boot()}})}
+async function refresh(){
+  if(!await waitG())return false;gInit();
+  return new Promise(res=>{waiter=res;google.accounts.id.prompt();setTimeout(()=>{if(waiter){waiter(false);waiter=null}},6000)})}
+async function api(action,data={},retry=true){
+  if(retry&&tok&&jwtExp(tok)-Date.now()<120000)await refresh();
+  let r;try{r=await fetch(API,{method:'POST',body:JSON.stringify({token:tok,action,data})}).then(x=>x.json())}catch(e){throw new Error('No connection. Check your internet and try again.')}
+  if(r.error==='auth'){if(retry&&await refresh())return api(action,data,false);signOut();throw new Error('Please sign in again.')}
+  if(r.error)throw new Error(r.error);return r.data}
+function signOut(){tok='';localStorage.t='';me=null;if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();login()}
+function login(){
+  $('#who').innerHTML='';app.innerHTML='<div class="card"><img src="logo-full.png" alt="Maeve Technologies" style="max-width:220px;width:60%;display:block;margin:0 auto 1rem;background:#fff;border-radius:8px"><h1>Sign in to start</h1><p>Use the Google account your teacher has on file. You will stay signed in on this device until you tap Sign out.</p><div id="g"></div><p id="msg" class="err"></p></div>';
+  waitG().then(ok=>{if(!ok)return $('#msg').textContent='Could not reach Google. Check your internet.';gInit();google.accounts.id.renderButton($('#g'),{theme:'filled_blue',size:'large',text:'signin_with'})})}
+async function boot(){
+  if(!tok)return login();
+  try{me=await api('me')}catch(e){return}
+  $('#who').innerHTML=`<span>${esc(me.name)}</span><button class="alt" style="color:#fff;border-color:#fff;min-height:36px;padding:.2rem .7rem" onclick="signOut()">Sign out</button>`;route()}
+async function route(){
+  if(!me)return;const [p,id]=(location.hash.slice(2)||'').split('/');
+  try{app.innerHTML='<p>Loading…</p>';
+    ({'':home,quiz:take,attempt:viewAttempt,results:results,board:board,new:()=>edit(),edit:()=>edit(id)}[p]||home)(id)}
+  catch(e){app.innerHTML=`<div class="card"><p class="err">${esc(e.message)}</p><button onclick="location.hash='#/'">Back home</button></div>`}}
+addEventListener('hashchange',route);
+const TYPES={auto:'Auto-graded',mixed:'Multiple choice and written',file:'Upload your work'};
+async function home(){
+  const l=await api('list');
+  if(me.role==='teacher'){
+    app.innerHTML=`<div class="row sp"><h1>My quizzes</h1><button onclick="location.hash='#/new'">New quiz</button></div>`+(l.length?l.map(q=>`<div class="card"><div class="row sp"><div><h2>${esc(q.title||'Untitled')}</h2><span class="tag">${TYPES[q.type]}</span> <span class="tag">${q.status==='published'?(q.opens_at>Date.now()?'Scheduled '+dt(q.opens_at):'Published'):'Draft'}</span> <span class="mute">${q.n} submissions</span></div>
+    <div class="row"><button class="alt" onclick="location.hash='#/edit/${q.id}'">Edit</button><button onclick="location.hash='#/results/${q.id}'">Results</button></div></div><p class="mute">Student link: <code>${location.origin+location.pathname}#/quiz/${q.id}</code></p></div>`).join(''):'<div class="card">No quizzes yet. Create your first one.</div>');return}
+  app.innerHTML='<h1>My quizzes</h1>'+(l.length?l.map(q=>{const left=3-q.attempts.length;return`<div class="card"><div class="row sp"><div><h2>${esc(q.title)}</h2><span class="tag">${TYPES[q.type]}</span> ${q.open?'':`<span class="tag">${q.opens_at>Date.now()?'Opens '+dt(q.opens_at):'Closed'}</span>`}</div>
+  <div class="row">${q.open&&left>0?`<button onclick="location.hash='#/quiz/${q.id}'">${q.attempts.length?'Try again':'Start'}</button>`:''}${q.board==='show'?`<button class="alt" onclick="location.hash='#/board/${q.id}'">Leaderboard</button>`:''}</div></div>
+  ${q.attempts.map(a=>`<p>Attempt ${a.n}: ${a.pending?'<span class="mute">waiting for your teacher</span>':`<b>${a.total}/${a.max}</b>`} <a href="#/attempt/${a.id}">See breakdown</a></p>`).join('')}<p class="mute">${left} of 3 attempts left</p></div>`}).join(''):'<div class="card">No quizzes available yet.</div>')}
+/* ---------- take ---------- */
+async function take(id){
+  const q=await api('getQuiz',{id});window.Q=q;window.ANS={};window.FILE=null;
+  if(!q.open)return app.innerHTML=`<div class="card"><h1>${esc(q.title)}</h1><p>${q.opens_at>Date.now()?'Opens '+dt(q.opens_at):'This quiz is closed.'}</p></div>`;
+  if(q.used>=q.max_attempts)return app.innerHTML='<div class="card"><h1>No attempts left</h1><p>You have used all 3 attempts.</p></div>';
+  app.innerHTML=`<h1>${esc(q.title)}</h1><p class="mute">Attempt ${q.used+1} of 3. Signed in as ${esc(me.email)}.</p>${q.instructions?`<p>${esc(q.instructions)}</p>`:''}`+
+  (q.type==='file'?`<div class="card">${q.file_name?`<button class="alt" onclick="dl({quiz_id:'${q.id}'})">Download ${esc(q.file_name)}</button>`:''}<p>Upload a photo, PDF or Word file of your workings.</p><input type="file" id="f" accept="image/*,.pdf,.doc,.docx"></div>`:
+  q.questions.map((x,i)=>`<div class="card"><b>${i+1}. ${esc(x.text)}</b> <span class="mute">(${x.points||1} mark${x.points>1?'s':''})</span>${x.type==='mcq'?x.options.map((o,j)=>`<label class="opt"><input type="radio" name="${x.id}" onchange="ANS['${x.id}']=${j}">${esc(o)}</label>`).join(''):`<textarea rows="4" oninput="ANS['${x.id}']=this.value"></textarea>`}</div>`).join(''))+
+  `<p id="msg" class="err"></p><button id="sb" onclick="submitQ()">Submit answers</button>`}
+async function b64(file){
+  if(file.type.startsWith('image/')){const bmp=await createImageBitmap(file),s=Math.min(1,1600/Math.max(bmp.width,bmp.height)),c=document.createElement('canvas');c.width=bmp.width*s;c.height=bmp.height*s;c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    file=await new Promise(r=>c.toBlob(r,'image/jpeg',.8));return{name:(file.name||'work')+'.jpg',mime:'image/jpeg',b64:await rd(file)}}
+  return{name:file.name,mime:file.type||'application/octet-stream',b64:await rd(file)}}
+const rd=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result.split(',')[1]);x.readAsDataURL(f)});
+async function submitQ(){
+  const sb=$('#sb'),m=$('#msg');m.textContent='';
+  if(Q.type!=='file'){const miss=Q.questions.filter(x=>ANS[x.id]===undefined||ANS[x.id]==='').length;if(miss&&!confirm(miss+' question(s) are blank. Submit anyway?'))return}
+  sb.disabled=true;sb.textContent='Submitting… please wait';
+  try{let file;if(Q.type==='file'){const f=$('#f').files[0];if(!f)throw new Error('Choose a file to upload first.');file=await b64(f);if(f.size>6e6&&!f.type.startsWith('image/'))throw new Error('File is too big. Keep it under 6 MB.')}
+    const r=await api('submit',{quiz_id:Q.id,answers:ANS,file});location.hash='#/attempt/'+r.id}
+  catch(e){m.textContent=e.message;sb.disabled=false;sb.textContent='Submit answers'}}
+async function dl(d){try{const f=await api('file',d),a=document.createElement('a');a.href='data:'+f.mime+';base64,'+f.b64;a.download=f.name;a.click()}catch(e){alert(e.message)}}
+/* ---------- breakdown + grading ---------- */
+async function viewAttempt(id){
+  const r=await api('attempt',{id}),t=r.teacher;window.R=r;
+  app.innerHTML=`<h1>${esc(r.quiz.title)}</h1><p class="mute">${t?esc(r.att.name)+' ('+esc(r.att.email)+'), ':''}Attempt ${r.att.attempt}</p>
+  <div class="card"><div class="big">${r.pending?'Waiting for marks':r.total+' / '+r.max}</div>${r.pending?'<p>Your teacher has not finished marking yet. Check back soon.</p>':''}${!t&&!r.pending?'<button class="alt" onclick="resend()">Email me a copy</button>':''}</div>`+
+  r.items.map((it,i)=>{
+    const g=it.id==='_file';
+    return `<div class="card"><b>${g?'Uploaded work':(i+1)+'. '+esc(it.text)}</b>
+    ${g?(r.att.file_name?`<p><button class="alt" onclick="dl({attempt_id:'${r.att.id}'})">Download ${esc(r.att.file_name)}</button></p>`:''):`<p>${t?'Answer':'Your answer'}: ${it.type==='mcq'?esc((it.options||[])[it.answer]??'No answer'):esc(it.answer||'No answer')}</p>`}
+    ${it.type==='mcq'?`<p>Correct answer: ${esc(it.options[it.correct])}</p>`:''}
+    ${t&&it.type==='text'?`<label class="opt"><input type="radio" name="m${it.id}" value="1" ${it.pending?'':it.ok?'checked':''}>Correct</label><label class="opt"><input type="radio" name="m${it.id}" value="0" ${it.pending?'':!it.ok?'checked':''}>Wrong</label>`:
+     t&&g?`<label>Marks (out of ${it.max})<input type="number" id="sc" min="0" max="${it.max}" value="${it.got??''}"></label>`:
+     `<p>${it.pending?'<span class="mute">Waiting for your teacher</span>':it.type==='mcq'||!g?`<span class="${it.ok?'ok':'no'}">${it.ok?'Correct':'Not correct'}</span> `:''}${it.got!=null?it.got+'/'+it.max:''}</p>`}
+    ${t&&(it.type==='text'||g)?`<textarea id="c${it.id}" rows="2" placeholder="Comment for the student">${esc(it.comment||'')}</textarea>`:it.comment?`<p><i>Teacher: ${esc(it.comment)}</i></p>`:''}</div>`}).join('')+
+  (t?`<p id="msg"></p><button onclick="saveGrade()">Save marks</button> <button class="alt" onclick="history.back()">Back</button>`:`<button class="alt" onclick="location.hash='#/'">Back home</button>`)}
+async function resend(){try{await api('resend',{id:R.att.id});alert('Sent to '+me.email)}catch(e){alert(e.message)}}
+async function saveGrade(){
+  const man={};
+  for(const it of R.items){
+    const c=($('#c'+it.id)||{}).value||'';
+    if(it.id==='_file'){const v=$('#sc').value;if(v==='')return $('#msg').textContent='Enter marks for the work.',0;man._file={score:Math.min(+v,it.max),comment:c}}
+    else if(it.type==='text'){const r=document.querySelector(`input[name="m${it.id}"]:checked`);if(!r)return $('#msg').textContent='Mark every written answer Correct or Wrong.',0;man[it.id]={ok:r.value==='1',comment:c}}}
+  try{const r=await api('grade',{id:R.att.id,manual:man});alert('Saved. Score: '+r.total);history.back()}catch(e){$('#msg').textContent=e.message}}
+/* ---------- results + leaderboard ---------- */
+async function results(id){
+  const r=await api('results',{id});window.RES=r;
+  app.innerHTML=`<div class="row sp"><h1>${esc(r.title)}</h1><button class="alt" onclick="csv()">Export CSV</button></div><div class="card"><h2>Submissions</h2><table><tr><th>Student</th><th>Try</th><th>Score</th><th></th></tr>${r.attempts.map(a=>`<tr><td>${esc(a.name)}</td><td>${a.attempt}</td><td>${a.pending?'<span class="tag">to mark</span>':a.total+'/'+a.max}</td><td><a href="#/attempt/${a.id}">Open</a></td></tr>`).join('')||'<tr><td colspan="4" class="mute">No submissions yet.</td></tr>'}</table></div>${lb(r.board)}<button class="alt" onclick="location.hash='#/'">Back home</button>`}
+const lb=b=>`<div class="card"><h2>Leaderboard</h2><p class="mute">Best score for each student.</p><table>${b.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.name)}</td><td>${x.total}/${x.max}</td></tr>`).join('')||'<tr><td class="mute">Nothing to rank yet.</td></tr>'}</table></div>`;
+async function board(id){const r=await api('board',{id});app.innerHTML=`<h1>${esc(r.title)}</h1>${lb(r.board)}<button class="alt" onclick="location.hash='#/'">Back home</button>`}
+function csv(){const q=s=>'"'+String(s).replace(/"/g,'""').replace(/^([=+\-@])/,"'$1")+'"',t=[['Name','Email','Attempt','Score','Out of','Status'],...RES.attempts.map(a=>[a.name,a.email,a.attempt,a.total,a.max,a.pending?'to mark':'marked'])].map(r=>r.map(q).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download='results.csv';a.click()}
+/* ---------- editor ---------- */
+async function edit(id){
+  E=id?await api('getQuiz',{id}):{type:'auto',status:'draft',access:'roster',board:'show',questions:[],opens_at:'',closes_at:'',max:10,title:'',instructions:''};drawEdit()}
+function drawEdit(){
+  const f=E.type==='file';
+  app.innerHTML=`<h1>${E.id?'Edit quiz':'New quiz'}</h1><div class="card">
+  <label>Title<input value="${esc(E.title)}" oninput="E.title=this.value"></label>
+  <label>Quiz type<select onchange="E.type=this.value;if(E.type==='auto')E.questions=E.questions.filter(q=>q.type==='mcq');drawEdit()">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${E.type===k?'selected':''}>${v}</option>`).join('')}</select></label>
+  <label>Instructions<textarea rows="2" oninput="E.instructions=this.value">${esc(E.instructions)}</textarea></label>
+  <div class="row"><label style="flex:1">Opens<input type="datetime-local" value="${loc(E.opens_at)}" onchange="E.opens_at=this.value?new Date(this.value).getTime():''"></label><label style="flex:1">Closes<input type="datetime-local" value="${loc(E.closes_at)}" onchange="E.closes_at=this.value?new Date(this.value).getTime():''"></label></div>
+  <div class="row"><label style="flex:1">Who can take it<select onchange="E.access=this.value"><option value="roster" ${E.access==='roster'?'selected':''}>Only students on the roster</option><option value="link" ${E.access==='link'?'selected':''}>Anyone signed in with the link</option></select></label>
+  <label style="flex:1">Leaderboard<select onchange="E.board=this.value"><option value="show" ${E.board==='show'?'selected':''}>Students can see it</option><option value="hide" ${E.board==='hide'?'selected':''}>Only me</option></select></label></div>
+  ${f?`<label>Total marks<input type="number" value="${E.max}" oninput="E.max=+this.value"></label><label>Worksheet to share (PDF, Word or image)<input type="file" id="qf" accept="image/*,.pdf,.doc,.docx"></label>${E.file_name?`<p class="mute">Current file: ${esc(E.file_name)}</p>`:''}`:''}</div>
+  ${f?'':`${E.questions.map((q,i)=>`<div class="card"><div class="row sp"><b>Question ${i+1} <span class="tag">${q.type==='mcq'?'Multiple choice':'Written'}</span></b><button class="bad" onclick="E.questions.splice(${i},1);drawEdit()">Delete question</button></div>
+  <textarea rows="2" placeholder="Question" oninput="E.questions[${i}].text=this.value">${esc(q.text)}</textarea>
+  ${q.type==='mcq'?q.options.map((o,j)=>`<div class="row" style="flex-wrap:nowrap"><input type="radio" name="a${i}" ${q.answer===j?'checked':''} onchange="E.questions[${i}].answer=${j}" aria-label="Correct answer"><input value="${esc(o)}" placeholder="Option ${j+1}" oninput="E.questions[${i}].options[${j}]=this.value"></div>`).join(''):`<textarea rows="2" placeholder="Model answer (only you see this)" oninput="E.questions[${i}].model=this.value">${esc(q.model||'')}</textarea>`}
+  <label>Marks<input type="number" min="1" value="${q.points||1}" style="width:6rem" oninput="E.questions[${i}].points=+this.value"></label></div>`).join('')}
+  <div class="row"><button class="alt" onclick="addQ('mcq')">Add multiple choice</button>${E.type==='mixed'?'<button class="alt" onclick="addQ(\'text\')">Add written question</button>':''}<label class="btn alt" style="display:inline-flex;align-items:center;background:transparent;color:var(--g);border:2px solid var(--g)">Import CSV<input type="file" accept=".csv" hidden onchange="impCsv(this)"></label><button class="alt" onclick="tpl()">CSV template</button></div>`}
+  <p id="msg" class="err"></p><div class="row" style="margin-top:1rem"><button onclick="saveQ('draft')" class="alt">Save draft</button><button onclick="saveQ('published')">${E.opens_at>Date.now()?'Schedule':'Publish'}</button><button class="alt" onclick="location.hash='#/'">Cancel</button></div>`}
+function addQ(t){E.questions.push(t==='mcq'?{type:'mcq',text:'',options:['','','',''],answer:0,points:1}:{type:'text',text:'',points:1});drawEdit()}
+function tpl(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['type,question,A,B,C,D,answer,points\nmcq,What is 2+2?,3,4,5,6,B,1\ntext,Explain photosynthesis.,,,,,,3\n'],{type:'text/csv'}));a.download='quiz-template.csv';a.click()}
+function parseCsv(s){const R=[];let r=[],c='',q=false;s=s.replace(/^\uFEFF/,'');for(let i=0;i<s.length;i++){const x=s[i];if(q){if(x==='"'&&s[i+1]==='"'){c+='"';i++}else if(x==='"')q=false;else c+=x}else if(x==='"')q=true;else if(x===','){r.push(c);c=''}else if(x==='\n'||x==='\r'){if(x==='\r'&&s[i+1]==='\n')i++;r.push(c);c='';R.push(r);r=[]}else c+=x}if(c||r.length){r.push(c);R.push(r)}return R.filter(r=>r.some(v=>v.trim()))}
+async function impCsv(inp){
+  const f=inp.files[0];if(!f)return;const rs=parseCsv(await f.text()).slice(1),out=[],bad=[];
+  rs.forEach((r,i)=>{const t=(r[0]||'').trim().toLowerCase(),n=i+2;
+    if(t==='mcq'){const o=r.slice(2,6).map(x=>x.trim()),a='ABCD'.indexOf((r[6]||'').trim().toUpperCase());if(!r[1]||o.filter(Boolean).length<2||a<0||!o[a])return bad.push('Row '+n+': check the options and the answer letter');out.push({type:'mcq',text:r[1],options:o,answer:a,points:+r[7]||1})}
+    else if(t==='text'&&E.type==='mixed'){if(!r[1])return bad.push('Row '+n+': missing question');out.push({type:'text',text:r[1],points:+r[7]||1})}
+    else bad.push('Row '+n+': type must be mcq'+(E.type==='mixed'?' or text':''))});
+  if(bad.length&&!confirm(bad.slice(0,6).join('\n')+'\n\nImport the '+out.length+' valid rows anyway?'))return;
+  E.questions=(E.questions.length&&!confirm('Replace existing questions? OK = replace, Cancel = add to them.'))?E.questions.concat(out):out;drawEdit()}
+async function saveQ(status){
+  const m=$('#msg');m.textContent='';
+  try{if(!E.title.trim())throw new Error('Give the quiz a title.');
+    if(E.type!=='file'){if(!E.questions.length)throw new Error('Add at least one question.');
+      E.questions.forEach((q,i)=>{if(!q.text.trim())throw new Error('Question '+(i+1)+' is empty.');if(q.type==='mcq'&&q.options.filter(o=>o.trim()).length<2)throw new Error('Question '+(i+1)+' needs two or more options.');if(q.type==='mcq'&&!q.options[q.answer].trim())throw new Error('Question '+(i+1)+': the correct answer is blank.')})}
+    if(E.opens_at&&E.closes_at&&E.closes_at<=E.opens_at)throw new Error('Closing time must be after opening time.');
+    const d=Object.assign({},E,{status});const fi=$('#qf');if(fi&&fi.files[0])d.file=await b64(fi.files[0]);
+    await api('saveQuiz',d);location.hash='#/'}catch(e){m.textContent=e.message}}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+boot();
+</script></body></html>
